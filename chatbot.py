@@ -8,6 +8,7 @@ import sys
 import os
 import time
 from dataclasses import dataclass
+import typing
 
 import irc
 
@@ -37,9 +38,16 @@ class Chatbot:
 		name: str
 		params: str
 
-	def __init__(self, command_char, global_prefix=None):
+	@dataclass
+	class DispatchInfo:
+		callback: typing.Any
+		cooldown: float # Seconds
+		last_call_time: float = 0.0
+
+	def __init__(self, command_char, global_prefix=None, show_password=False):
 		self.__irc_client = irc.Client()
 		self.global_prefix = global_prefix
+		self.show_password = show_password
 		self.command_char = command_char
 		self.__command_methods = {}
 		self.channel = None
@@ -87,7 +95,12 @@ class Chatbot:
 
 	def send(self, command, params):
 		sent_msg, num_sent_bytes = self.irc_client.send(self.global_prefix, command, params)
-		self.logger.info("< " + sent_msg)
+		if command == "PASS" and not self.show_password:
+			censored_msg = self.irc_client.format_msg(self.global_prefix, command, "*" * len(params))
+			self.logger.info("< " + censored_msg)
+		else:
+			self.logger.info("< " + sent_msg)
+
 		return sent_msg, num_sent_bytes
 
 	def send_privmsg(self, msg):
@@ -95,18 +108,21 @@ class Chatbot:
 		self.logger.info("< " + sent_msg)
 		return sent_msg, num_sent_bytes
 
-	def register_command(self, command_name, callback):
-		self.command_methods[command_name] = callback
+	def register_command(self, command_name, callback, cooldown=0):
+		self.command_methods[command_name] = Chatbot.DispatchInfo(callback, cooldown);
 
 	def dispatch_command(self, msg: irc.Privmsg):
+		now = time.time()
 		parts = msg.text.split(None, 1)
 		command_str = parts[0].lower()
 		if self.is_known_command(command_str):
-			fn = self.command_methods[command_str[1:]]
-			params = parts[1] if len(parts) == 2 else None
-			cmd = Chatbot.Command(msg, command_str, params)
-			fn(cmd)
-	
+			info = self.command_methods[command_str[1:]]
+			if now - info.last_call_time >= info.cooldown:
+				params = parts[1] if len(parts) == 2 else None
+				cmd = Chatbot.Command(msg, command_str, params)
+				info.last_call_time = now
+				info.callback((cmd))
+
 	def setup_logging(self, logs_folder, logger_name, log_to_console=True):
 		if not os.path.exists(logs_folder):
 			os.mkdir(logs_folder)

@@ -18,7 +18,7 @@ class TwitchBot(Chatbot):
 	"""
 	Chat bot base class made specifically for Twitch
 
-	In derived classes, commands handlers (responding to '!<command>' messages) are registered using the `@TwitchBot.new_command` decorator and must be methods that take a `Chatbot.Command` as parameter (along with self). The method name is used as command name and is not case-sensitive. The method docstring is used as help text if user types !help <command>. The name of the command (preceded or not by !) can be ommitted and will be inserted automatically.
+	In derived classes, commands handlers (responding to '!<command>' messages) are registered using the `@TwitchBot.new_command` decorator and must be methods that take a `Chatbot.Command` as parameter (along with self). The method name is used as command name and is not case-sensitive. The method docstring is used as help text if user types !help <command>. The name of the command (preceded or not by !) can be ommitted and will be inserted automatically. The `cooldown` parameter of the decorator is used to limit the frequency at which the command is triggered. It is a cooldown period after each dispatched call.
 
 	Example: 
 	.. code-block:: python
@@ -27,6 +27,10 @@ class TwitchBot(Chatbot):
 			def my_command(self, cmd: Chatbot.Command):
 				'''{some_required_param} [some_optional_param]'''
 				# Do something
+			@TwitchBot.new_command(cooldown=3.0)
+			def my_command(self, cmd: Chatbot.Command):
+				'''{some_required_param} [some_optional_param]'''
+				# Do something, but at most every 3 seconds because of cooldown
 
 	In this case, the command is activated by the message !my_command followed or not by something.
 	!help my_command will send the help string (so '!my_command {some_required_param} [some_optional_param]').
@@ -36,17 +40,27 @@ class TwitchBot(Chatbot):
 	"""
 
 	@classmethod
-	def new_command(cls, fn):
-		fn.is_command_function = True
-		return fn
+	def new_command(cls, cooldown):
+		def decorator(fn):
+			fn.command_cooldown = cooldown
+			fn.is_command_function = True
+			return fn
+		# Trick to check if decorator was applied without arguments. If the first argument is callable, then it is the function to be decorated
+		if callable(cooldown):
+			fn = cooldown
+			cooldown = 0
+			return decorator(fn)
+		else:
+			return decorator
 
 	twitch_chat_url = "irc.chat.twitch.tv"
 	twitch_chat_port = 6697
 	twitch_text_len_max = 500
 	help_command_names = ("commands", "help")
+	default_help_cooldown = 3.0
 
-	def __init__(self, logs_folder, log_to_console=True, pokemon_exception_handling=False):
-		super().__init__(command_char="!")
+	def __init__(self, logs_folder, log_to_console=True, pokemon_exception_handling=False, show_password=False):
+		super().__init__(command_char="!", show_password=show_password)
 		self.logs_folder = logs_folder
 		self.log_to_console = log_to_console
 		self.pokemon_exception_handling=pokemon_exception_handling
@@ -77,6 +91,7 @@ class TwitchBot(Chatbot):
 			self.receive_msgs()
 
 		self.join_channel(channel)
+		time.sleep(0.5)
 		while self.receive_msgs() == []:
 			pass
 
@@ -122,7 +137,7 @@ class TwitchBot(Chatbot):
 		else:
 			requested_command = cmd.params.split(None, 1)[0].lstrip("!").lower()
 			if requested_command in self.command_methods:
-				msg = self.command_methods[requested_command].__doc__
+				msg = self.command_methods[requested_command].callback.__doc__
 				self.send_privmsg(msg)
 			else:
 				self.send_privmsg(f"I don't know what '{requested_command}' is.")
@@ -134,14 +149,14 @@ class TwitchBot(Chatbot):
 			self.logger.warning(f"Message length {text_length} > {TwitchBot.twitch_text_len_max}")
 		return sent_msg, num_sent_bytes
 
-	def register_command(self, command_name, callback):
+	def register_command(self, command_name, callback, cooldown):
 		copied_callback = functools.partial(callback)
 		copied_callback.__doc__ = TwitchBot.format_usage_docstring(command_name, callback.__doc__)
-		super().register_command(command_name.lower(), copied_callback)
+		super().register_command(command_name.lower(), copied_callback, cooldown)
 
 	@staticmethod
-	def get_user(prefix):
-		return prefix.split("!", 1)[0]
+	def get_user(cmd: Chatbot.Command):
+		return cmd.privmsg.prefix.split("!", 1)[0]
 
 	@staticmethod
 	def format_usage_docstring(method_name, docstr):
@@ -163,12 +178,11 @@ class TwitchBot(Chatbot):
 			lambda fn: hasattr(fn, "is_command_function") and fn.is_command_function
 		)
 		for name, method in command_functions:
-			self.register_command(name.lower(), method)
+			self.register_command(name.lower(), method, method.command_cooldown)
 
 	def _register_help_commands(self):
 		help_fn = functools.partial(TwitchBot.send_supported_commands, self)
 		help_fn.__doc__ = "Shows the usage for a command."
 		for name in TwitchBot.help_command_names:
-			self.register_command(name, help_fn)
-
+			self.register_command(name, help_fn, TwitchBot.default_help_cooldown)
 
