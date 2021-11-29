@@ -1,0 +1,16 @@
+.github/workflows/exercise.yml
+.gitpod.yml
+.theia/settings.json
+instructions.md
+README.md
+doc/assets/chatbot_classes.png
+doc/assets/uml.vsdx
+settings/files_to_update.txt
+settings/test_associations.json
+settings/variables.txt
+_main_version_prof.py
+_my_bot_version_prof.py
+_ch7_version_prof.py
+_ch8_version_prof.py
+_ch9_version_prof.py
+_ch11_version_prof.py
