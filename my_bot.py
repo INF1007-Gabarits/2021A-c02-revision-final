@@ -8,7 +8,8 @@ from chatbot import *
 from twitch_bot import *
 
 
-class MyBot(TwitchBot):
+# TODO: Hériter de la classe TwitchBot
+class MyBot:
 	def __init__(self, logs_folder, quotes):
 		# Construire la classe parent en lui passant le dossier de journaux.
 		# On garde le dictionnaire de citations (paramètre `quotes`) dans une variable d'instance.
