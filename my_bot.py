@@ -15,7 +15,7 @@ class MyBot:
 		# On garde le dictionnaire de citations (paramètre `quotes`) dans une variable d'instance.
 		pass
 
-	# TODO: Ajouter une commande "say_hi" (à l'aide du décorateur TwitchBot.command) qui répond avec un message de la forme:
+	# TODO: Ajouter une commande "say_hi" (à l'aide du décorateur TwitchBot.new_command) qui répond avec un message de la forme:
 	#       "My name is <nom-du-bot>. You killed my father. Prepare to die.", où <nom-du-bot> est le nom du compte utilisé par le chatbot.
 	#       Indice : Dans la méthode connect_and_join de TwitchBot, le nom (nickname) du bot est gardé comme attribut.
 
